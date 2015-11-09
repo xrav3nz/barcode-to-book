@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<meta charset=utf-8>
+<html lang="en">
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Find a book with barcode</title>
+    </head>
+    <body>
+        <div id="container">
+            <label>
+                <p>Scan or upload book's barcode</p>
+                <p><input id="Take-Picture" type="file" accept="image/*;capture=camera" /></p>
+            </label>
+            <canvas width="320" height="240" id="picture"></canvas>
+            <p id="textbit"></p>
+            <p id="bookinfo"></p>
+        </div>
+        <script type="text/javascript" src="JOB.js"></script>
+        <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+        <script type="text/javascript">
+            var takePicture = document.querySelector("#Take-Picture"),
+            showPicture = document.createElement("img");
+            Result = document.querySelector("#textbit");
+            var canvas =document.getElementById("picture");
+            var ctx = canvas.getContext("2d");
+            JOB.Init();
+            JOB.SetImageCallback(function(result) {
+                if(result.length > 0){
+                    Result.innerHTML = "Successfully decoded barcode</br> " + result[0].Format + " : " + result[0].Value;
+                    book.initialize(result[0].Value, document.getElementById("bookinfo"));
+                    book.load();
+                }else{
+                    if(result.length === 0) {
+                        Result.innerHTML="Decoding failed. <br/>Try uploading a clearer image of the barcode.";
+                    }
+                }
+            });
+            JOB.PostOrientation = true;
+            JOB.OrientationCallback = function(result) {
+                canvas.width = result.width;
+                canvas.height = result.height;
+                var data = ctx.getImageData(0,0,canvas.width,canvas.height);
+                for(var i = 0; i < data.data.length; i++) {
+                    data.data[i] = result.data[i];
+                }
+                ctx.putImageData(data,0,0);
+            };
+            JOB.SwitchLocalizationFeedback(true);
+            JOB.SetLocalizationCallback(function(result) {
+                ctx.beginPath();
+                ctx.lineWIdth = "2";
+                ctx.strokeStyle="red";
+                for(var i = 0; i < result.length; i++) {
+                    ctx.rect(result[i].x,result[i].y,result[i].width,result[i].height);
+                }
+                ctx.stroke();
+            });
+            if(takePicture && showPicture) {
+                takePicture.onchange = function (event) {
+                    var files = event.target.files;
+                    if (files && files.length > 0) {
+                        file = files[0];
+                        book.clear();
+                        try {
+                            var URL = window.URL || window.webkitURL;
+                            showPicture.onload = function(event) {
+                                Result.innerHTML="Decoding barcode...";
+                                JOB.DecodeImage(showPicture);
+                                URL.revokeObjectURL(showPicture.src);
+                            };
+                            showPicture.src = URL.createObjectURL(file);
+                        }
+                        catch (e) {
+                            try {
+                                var fileReader = new FileReader();
+                                fileReader.onload = function (event) {
+                                    showPicture.onload = function(event) {
+                                        Result.innerHTML="Decoding barcode...";
+                                        console.log("filereader");
+                                        JOB.DecodeImage(showPicture);
+                                    };
+                                    showPicture.src = event.target.result;
+                                };
+                                fileReader.readAsDataURL(file);
+                            }
+                            catch (e) {
+                                Result.innerHTML = "Neither createObjectURL or FileReader are supported";
+                            }
+                        }
+                    }
+                };
+            }
+
+            var book = {
+                container : "",
+                isbn : "",
+                isbn_10 : "",
+                isbn_13 : "",
+                initialize : function (isbn, container) {
+                    this.isbn = isbn;
+                    this.container = container;
+                    this.clear();
+                },
+                clear : function () {
+                    this.container.innerHTML = "";
+                },
+                check_digit_10 : function () {
+                    var sum = 0, check_digit;
+                    for (var i = 0; i < 9; ++i) {
+                        sum += (10 - i) * parseInt(this.isbn_10.charAt(i));
+                    }
+                    check_digit = 11 - sum % 11;
+                    if (check_digit == 11) {
+                        check_digit = 0;
+                    } else if (check_digit == 10) {
+                        check_digit = 'X';
+                    }
+                    return check_digit.toString();
+                },
+                check_digit_13 : function () {
+                    var sum = 0, check_digit;
+                    for (var i = 0; i < 12; ++i) {
+                        sum += ((i % 2 == 0) ? 1 : 3) * parseInt(this.isbn_13.charAt(i));
+                    }
+                    check_digit = 10 - sum % 10;
+                    if (check_digit == 10) {
+                        check_digit = 0;
+                    }
+                    return check_digit.toString();
+                },
+                convert_isbn : function () {
+                    if (this.isbn.length == 10) {
+                        this.isbn_10 = this.isbn;
+                        this.isbn_13 = "978" + this.isbn_10;
+                        this.isbn_13 = this.isbn_13.substring(0, 12) + this.check_digit_13();
+                    } else if (this.isbn.length == 13) {
+                        this.isbn_13 = this.isbn;
+                        this.isbn_10 = this.isbn_13.substring(3, 12);
+                        this.isbn_10 = this.isbn_10.substring(0, 9) + this.check_digit_10();
+                    } else {
+                        throw "Invalid ISBN";
+                    }
+                },
+                parse : function (json) {
+                    html = "";
+                    br = "<br />";
+                    if (json.totalItems < 1) {
+                        html = "Cannot find book";
+                        return html;
+                    }
+                    json = json.items[0].volumeInfo;
+                    if (typeof json.imageLinks !== 'undefined' && typeof json.imageLinks.thumbnail !== 'undefined') {
+                        html += "<img src='" + json.imageLinks.thumbnail + "' />" + br;
+                    }
+                    if (typeof json.title !== 'undefined') {
+                        html += json.title + br;
+                    }
+                    if (typeof json.subtitle !== 'undefined') {
+                        html += json.subtitle + br;
+                    }
+                    if (json.authors.length > 0) {
+                        html += "Author(s): ";
+                        for (i = 0; i < json.authors.length; ++i) {
+                            html += json.authors[i];
+                            if (i + 1 < json.authors.length) html += ", "
+                        }
+                        html += br;
+                    }
+                    return html;
+                },
+                load : function () {
+                    try {
+                        this.convert_isbn();
+                        $.ajax("https://www.googleapis.com/books/v1/volumes?key=AIzaSyBBk5TwEcf6fxKqXJQI7IhqshS7AUjjmrs&maxResults=1&q=" + this.isbn_13, {
+                            beforeSend: function() {
+                                book.container.innerHTML = "Loading book information...";
+                            },
+                            success: function (data) {
+                                book.container.innerHTML = book.parse(data);
+                            }, failure: function (data) {
+                                throw "Connection error";
+                            }
+                        });
+                    } catch (err) {
+                        this.container.innerHTML = err;
+                    }
+                },
+            };
+        </script>
+    </body>
+</html>
+
