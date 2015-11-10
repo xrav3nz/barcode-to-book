@@ -145,10 +145,20 @@
                     html = "";
                     br = "<br />";
                     if (json.totalItems < 1) {
-                        html = "Cannot find book";
-                        return html;
+                        return "Cannot find book";
                     }
-                    json = json.items[0].volumeInfo;
+                    item = {};
+                    for (i = 0; i < json.items.length; ++i) {
+                        if (json.items[i].volumeInfo.industryIdentifiers[1].identifier == this.isbn_13) {
+                            item = json.items[i].volumeInfo;
+                            break;
+                        }
+                    }
+                    if (typeof item === 'undefined') {
+                        return "Cannot find book";
+                    } else {
+                        json = item;
+                    }
                     if (typeof json.imageLinks !== 'undefined' && typeof json.imageLinks.thumbnail !== 'undefined') {
                         html += "<img src='" + json.imageLinks.thumbnail + "' />" + br;
                     }
@@ -171,7 +181,7 @@
                 load : function () {
                     try {
                         this.convert_isbn();
-                        $.ajax("https://www.googleapis.com/books/v1/volumes?key=AIzaSyBBk5TwEcf6fxKqXJQI7IhqshS7AUjjmrs&maxResults=1&q=" + this.isbn_13, {
+                        $.ajax("https://www.googleapis.com/books/v1/volumes?key=AIzaSyBBk5TwEcf6fxKqXJQI7IhqshS7AUjjmrs&maxResults=10&q=" + this.isbn_13, {
                             beforeSend: function() {
                                 book.container.innerHTML = "Loading book information...";
                             },
@@ -186,6 +196,7 @@
                     }
                 },
             };
+
         </script>
     </body>
 </html>
